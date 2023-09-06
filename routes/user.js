@@ -166,28 +166,27 @@ userRoute.delete("/delete",async (req,resp)=>{
         if (!user) {
             return resp.status(404).json({error : "user not found"})
         }
-        let batches = await Batch.find({members : user._id})
-        const createdbatches = await Batch.find({owner : user._id})
-        const cocreatedbatches = await Batch.find({co_owners : user._id})
+        let batches = await Batch.find({members : user._id.toString()})
+        const createdbatches = await Batch.find({owner : user._id.toString()})
+        if (createdbatches.length>0) {
+            return resp.status(400).json({error : "user deletion failed",msg : "you own one or more batches"})
+        }
+        const cocreatedbatches = await Batch.find({co_owners : user._id.toString()})
         batches.push(...createdbatches)
         batches.push(...cocreatedbatches)
         if(batches) {
-            batches.forEach(batch => {
-                authLog.deleteMany({userId : user._id,batchId : batch._id})
-                const batchitem = Batch.findById(batch._id)
-                if(batchitem.members.includes(user._id)) {
-                    Attendance.deleteMany({batchId : batch._id,userId : user._id})
-                    batchitem.updateOne({$pull : {members : user._id}})
+            for (const batch of batches) {
+                const batchitem = await Batch.findById(batch._id)
+                if(batchitem.members.includes(user._id.toString())) {
+                    await batchitem.updateOne({$pull : {members : user._id.toString()}})
                 }
-                if(batchitem.co_owners.includes(user._id)) {
-                    batchitem.updateOne({$pull : {co_owners : user._id}})
+                if(batchitem.co_owners.includes(user._id.toString())) {
+                    await batchitem.updateOne({$pull : {co_owners : user._id.toString()}})
                 }
-                if(batchitem.owner==user._id) {
-                    console.log("safe delete")
-                }
-            })
+            }
         }
-
+        await Attendance.deleteMany({userId : user._id.toString()})
+        await authLog.deleteMany({userId : user._id.toString()})
         await user.deleteOne()
         return resp.status(200).json({msg : "user deleted"})
     }catch(err) {
@@ -195,7 +194,7 @@ userRoute.delete("/delete",async (req,resp)=>{
     }
 })
 
-userRoute.get("/info",async(req,resp)=>{
+userRoute.get("/info/:username",async(req,resp)=>{
     let token
     try {
         const authtoken = req.headers.authorization.split(" ")
@@ -212,9 +211,16 @@ userRoute.get("/info",async(req,resp)=>{
         if (!tokenData) {
             return resp.status(400).json({error : "token data maybe corrupted"})
         }
-        const user = await User.findById(tokenData.id)
-        if (!user) {
+        const curr_user = await User.findById(tokenData.id)
+        if (!curr_user) {
             return resp.status(404).json({error : "user not found"})
+        }
+        if (!req.params.username) {
+            return resp.json({error : "missing argument",required_args :['username']})
+        }
+        const user = await User.findOne({username : req.params.username})
+        if (!user) {
+            return resp.status(404).json({error : "invalid username"})
         }
         return resp.status(200).json({first_name : user.first_name
         ,middle_name : user.middle_name,last_name : user.last_name,email : user.email,

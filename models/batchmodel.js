@@ -7,7 +7,8 @@ const BatchSchema = mongoose.Schema({
     },
     short_id : {
         type : String,
-        unique : true
+        unique : true,
+        required : true
     },
     owner : {
         type : String,

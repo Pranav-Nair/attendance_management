@@ -1,3 +1,4 @@
+const {V3} = require("paseto")
 const isValidpassowrd = (password) =>{
     let valid = true
     const alphabets_low =/[a-z]+/
@@ -41,4 +42,22 @@ const isValidusername = (username)=> {
     return valid
 }
 
-module.exports={isValidpassowrd,isValidusername}
+const parseToken =async(req,resp)=>{
+    const authtoken = req.headers.authorization.split(" ")
+        if(authtoken.length==2) {
+            token = authtoken[1]
+        }else {
+            token = authtoken[0]
+        }
+        if (!token) {
+            return resp.status(400).json({error : "nrequires autherization"})
+        }
+        const payload = await V3.verify(token.toString(),process.env.signPublic)
+        const tokenData = await V3.decrypt(payload.tokendata,process.env.secretKey)
+        if (!tokenData) {
+            return resp.status(400).json({error : "token data maybe corrupted"})
+        }
+        return tokenData
+}
+
+module.exports={isValidpassowrd,isValidusername,parseToken}
