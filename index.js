@@ -4,6 +4,7 @@ const dotenv = require("dotenv")
 const fileupload = require("express-fileupload")
 const userRoute = require("./routes/user")
 const batchRoute = require("./routes/batch")
+const attendanceRoute = require("./routes/attendance")
 const {V3} = require("paseto")
 
 dotenv.config()
@@ -20,6 +21,7 @@ app.use(express.urlencoded({extended : true}))
 app.use(fileupload())
 app.use("/api/user",userRoute)
 app.use("/api/batch",batchRoute)
+app.use("/api/attendance",attendanceRoute)
 
 app.listen(3000,(err,_)=>{
     if(err) {

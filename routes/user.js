@@ -57,12 +57,23 @@ userRoute.post("/register",async (req,resp)=>{
 
 userRoute.post("/login",async (req,resp)=>{
     try {
-        if (!req.body.username || ! req.body.password) {
-            return resp.status(400).json({error : "missing fields",required_fields : ['username','password']})
+        if (!req.body.username || ! req.body.password || !req.body.location || !req.body.deviceId) {
+            return resp.status(400).json({error : "missing fields",required_fields : ['username','password','location','deviceId']})
         }
         const user = await User.findOne({username : req.body.username})
         if (!user) {
             return resp.status(404).json({error : "username or password is wrong"})
+        }
+        const batches = await Batch.find({members : user._id.toString()})
+        for (const batch of batches) {
+            const auth = await new authLog({
+                batchId : batch._id.toString(),
+                userId : user._id.toString(),
+                location : req.body.location,
+                deviceId : req.body.deviceId,
+                requestType : "logIn"
+            })
+            auth.save()
         }
         const validpassword = await bcrypt.compare(req.body.password,user.password)
         if (!validpassword) {
