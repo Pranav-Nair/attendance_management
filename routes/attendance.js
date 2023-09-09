@@ -3,7 +3,7 @@ const {parseToken} = require("../validators/validator")
 const Batch = require("../models/batchmodel")
 const {User} = require("../models/usermodel")
 const Attendance = require("../models/attendancemodel")
-const batchRoute = require("./batch")
+const fs = require("fs")
 
 const attendanceRoute = express.Router()
 
@@ -69,6 +69,69 @@ attendanceRoute.post("/checkout", async (req,resp)=>{
     catch(err){
         console.log(err)
         return resp.status(400).json({error : err.toString()})
+    }
+})
+
+attendanceRoute.post("/upload",async (req,resp)=>{
+    try {
+        const data = await parseToken(req,resp)
+        const user = await User.findById(data.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+        let form = new FormData()
+
+        if (!req.files || !req.files.img) {
+            return resp.json({error : "missing fields",required_fields : ['img']})
+        } 
+        fs.mkdirSync("./usermedia/"+user._id.toString()+"/photo",{recursive : true})
+        req.files.img.mv("./usermedia/"+user._id.toString()+"/photo/"+req.files.img.name)
+        const image = fs.readFileSync("./usermedia/"+user._id.toString()+"/photo/"+req.files.img.name)
+        let blob = new Blob([image])
+        form.append("id",user._id.toString())
+        form.append("img",blob,req.files.img.name)
+        const response = await fetch("http://localhost:5000/ml/upload",{
+            method : "POST",
+            body : form
+        })
+        const resp_json = await response.json()
+        return resp.json(resp_json)
+    }
+    catch(err) {
+        console.log(err)
+        return resp.json({error : err.toString()})
+    }
+})
+
+attendanceRoute.post("/compare",async(req,resp)=>{
+    try {
+        const data = await parseToken(req,resp)
+        const user = await User.findById(data.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+        let form = new FormData()
+
+        if (!req.files || !req.files.img) {
+            return resp.json({error : "missing fields",required_fields : ['img']})
+        } 
+        fs.mkdirSync("./usermedia/"+user._id.toString()+"/tmp",{recursive : true})
+        await req.files.img.mv("./usermedia/"+user._id.toString()+"/tmp/"+req.files.img.name)
+        const image = fs.readFileSync("./usermedia/"+user._id.toString()+"/tmp/"+req.files.img.name)
+        let blob = new Blob([image])
+        form.append("id",user._id.toString())
+        form.append("img",blob,req.files.img.name)
+        const response = await fetch("http://localhost:5000/ml/compare",{
+            method : "POST",
+            body : form
+        })
+        const resp_json = await response.json()
+        fs.rmSync("./usermedia/"+user._id.toString()+"/tmp/"+req.files.img.name)
+        return resp.json(resp_json)
+    }
+    catch(err) {
+        console.log(err)
+        return resp.json({error : err.toString()})
     }
 })
 
