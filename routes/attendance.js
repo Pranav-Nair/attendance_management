@@ -85,8 +85,8 @@ attendanceRoute.post("/upload",async (req,resp)=>{
             return resp.json({error : "missing fields",required_fields : ['img']})
         } 
         fs.mkdirSync("./usermedia/"+user._id.toString()+"/photo",{recursive : true})
-        req.files.img.mv("./usermedia/"+user._id.toString()+"/photo/"+req.files.img.name)
-        const image = fs.readFileSync("./usermedia/"+user._id.toString()+"/photo/"+req.files.img.name)
+        await req.files.img.mv("./usermedia/"+user._id.toString()+"/photo/"+"self")
+        const image = fs.readFileSync("./usermedia/"+user._id.toString()+"/photo/"+"self")
         let blob = new Blob([image])
         form.append("id",user._id.toString())
         form.append("img",blob,req.files.img.name)
@@ -95,10 +95,10 @@ attendanceRoute.post("/upload",async (req,resp)=>{
             body : form
         })
         const resp_json = await response.json()
+        fs.rmSync("./usermedia/"+user._id.toString()+"/photo/"+"self")
         return resp.json(resp_json)
     }
     catch(err) {
-        console.log(err)
         return resp.json({error : err.toString()})
     }
 })
@@ -130,7 +130,6 @@ attendanceRoute.post("/compare",async(req,resp)=>{
         return resp.json(resp_json)
     }
     catch(err) {
-        console.log(err)
         return resp.json({error : err.toString()})
     }
 })
