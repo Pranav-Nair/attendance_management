@@ -49,7 +49,7 @@ const authSchema = mongoose.Schema({
     },
     requestType : {
         type : String,
-        enum : ["logIn","Ping"]
+        enum : ["logIn","Ping","uploadFace","deleteFace"]
     }
 },{timestamps : true})
 

@@ -196,6 +196,13 @@ userRoute.delete("/delete",async (req,resp)=>{
                 }
             }
         }
+        const response = await fetch("http://localhost:5000/ml/delete",{
+            method : 'POST',
+            body : JSON.stringify({id : user._id.toString()})
+        })
+        if (response.status==400) {
+            return resp.status(400).json({error : "user deletion failed",msg : "failed to delete face"})
+        }
         await Attendance.deleteMany({userId : user._id.toString()})
         await authLog.deleteMany({userId : user._id.toString()})
         await user.deleteOne()
