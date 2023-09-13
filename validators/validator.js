@@ -43,6 +43,9 @@ const isValidusername = (username)=> {
 }
 
 const parseToken =async(req,resp)=>{
+    if (!req.headers.authorization) {
+        return resp.status(400).json({error : "missing authorization token"})
+    }
     const authtoken = req.headers.authorization.split(" ")
         if(authtoken.length==2) {
             token = authtoken[1]
@@ -60,4 +63,21 @@ const parseToken =async(req,resp)=>{
         return tokenData
 }
 
-module.exports={isValidpassowrd,isValidusername,parseToken}
+const isvalidDate = (date)=>{
+    let valid = true
+    const date_pattern = /(\d{4})-(\d{2})-(\d{2})/
+    if (!date_pattern.test(date)) {
+        valid = false
+        return valid
+    }
+    let matches = date.match(date_pattern)
+    if (Number(matches[2]) > 12 || Number(matches[2]) < 1) {
+        valid = false
+    }
+    if (Number(matches[3]) > 31 || Number(matches[3]) < 1) {
+        valid = false
+    }
+    return valid
+}
+
+module.exports={isValidpassowrd,isValidusername,parseToken,isvalidDate}
