@@ -23,6 +23,15 @@ app.use("/api/user",userRoute)
 app.use("/api/batch",batchRoute)
 app.use("/api/attendance",attendanceRoute)
 
+fetch("http://localhost:5000/")
+    .then((response)=>{
+        console.log("[OK] face recognition system running")
+    })
+    .catch((err)=>{
+        console.log("[ERROR] face recognitionsystem is down")
+    })
+
+
 app.listen(3000,(err,_)=>{
     if(err) {
         console.log("[ERROR] ",err.toString())

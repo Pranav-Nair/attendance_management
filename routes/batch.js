@@ -3,7 +3,7 @@ const Batch = require("../models/batchmodel")
 const {parseToken} = require("../validators/validator")
 const {User,authLog} = require("../models/usermodel")
 const Attendance = require("../models/attendancemodel")
-
+const fs = require("fs")
 const batchRoute = express.Router()
 
 batchRoute.post("/create",async (req,resp)=>{
@@ -161,7 +161,7 @@ batchRoute.post("/add-users", async (req,resp)=>{
             return resp.status(404).json({error : "user not found"})
         }
         if(!req.body.batchcode) {
-            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode']})
+            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','members (opt)','co_owners (opt)']})
         }
         if (!req.body.members && !req.body.co_owners) {
             return resp.status(400).json({error : "missing fields",required_fields : ['members (opt)','co_owners (opt)']})
@@ -170,7 +170,7 @@ batchRoute.post("/add-users", async (req,resp)=>{
         if (!batch) {
             return resp.status(404).json({error : "batch not found"})
         }
-        if (!batch.owner===user._id.toString() && !batch.co_owners.includes(user._id)) {
+        if (batch.owner!==user._id.toString() && !batch.co_owners.includes(user._id)) {
             return resp.status(400).json({error : "Permission denied",msg : "you need to be leader or co leader for doing this action"})
         }
         if(req.body.co_owners) {
@@ -209,10 +209,9 @@ batchRoute.post("/add-users", async (req,resp)=>{
                 valid_members.push(member_user._id.toString())
             }
         }
-        console.log(valid_members)
         let res = await batch.updateOne({$push : {co_owners : {$each : valid_co_owners} ,members : {$each : valid_members}}})
         return resp.json({msg : "added users to batch",batchcode : batch.short_id,
-    members_added : valid_members,co_owners_added : valid_co_owners})
+    members_added : req.body.members,co_owners_added : req.body.co_owners})
     }
     catch(err) {
         console.log(err)
@@ -230,7 +229,7 @@ batchRoute.post("/del-users",async (req,resp)=>{
             return resp.status(404).json({error : "user not found"})
         }
         if(!req.body.batchcode) {
-            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode']})
+            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','members (opt)','co_owners (opt)']})
         }
         if (!req.body.members && !req.body.co_owners) {
             return resp.status(400).json({error : "missing fields",required_fields : ['members (opt)','co_owners (opt)']})
@@ -239,7 +238,7 @@ batchRoute.post("/del-users",async (req,resp)=>{
         if (!batch) {
             return resp.status(404).json({error : "batch not found"})
         }
-        if (batch.owner!==user._id && !batch.co_owners.includes(user._id)) {
+        if (batch.owner!==user._id.toString() && !batch.co_owners.includes(user._id)) {
             return resp.status(400).json({error : "Permission denied",msg : "you need to be leader or co leader for doing this action"})
         }
         if(req.body.co_owners) {
@@ -272,10 +271,9 @@ batchRoute.post("/del-users",async (req,resp)=>{
                 valid_members.push(member_user._id.toString())
             }
         }
-        console.log(valid_members)
         await batch.updateOne({$pull : {co_owners :{$in :valid_co_owners } ,members :{$in :valid_members } }})
         return resp.json({msg : "removed users to batch",batchcode : batch.short_id,
-    members_removed : valid_members,co_owners_removed : valid_co_owners})
+    members_removed : req.body.members,co_owners_removed : req.body.co_owners})
     }
     catch(err) {
         return resp.status(400).json({error : err.toString()})
@@ -296,7 +294,7 @@ batchRoute.post("/edit",async (req,resp)=>{
         if (!batch) {
             return resp.status(404).json({error : "batch not found"})
         }
-        if (batch.owner!==user._id && !batch.co_owners.includes(user._id)) {
+        if (batch.owner!==user._id.toString() && !batch.co_owners.includes(user._id)) {
             return resp.status(400).json({error : "Permission denied",msg : "you need to be owner or co_owner to do this action"})
         }
         await batch.updateOne({$set : {name : req.body.batchname}})
@@ -436,6 +434,20 @@ batchRoute.post("/delete", async (req,resp)=>{
         if (batch.owner!==user._id.toString()) {
             return resp.status(400).json({error : "Permission denies",msg : "you need to be owner to perform this action"})
         }
+        let response = await fetch(process.env.pyfaceURi+"/analytics/purge",{
+            method : "POST",
+            headers : {
+                'Content-Type': 'application/json'
+            },
+            body : JSON.stringify({batchId : batch._id.toString()})
+        })
+        if( response.status == 400) {
+            response = await response.json()
+            return resp.json(response)
+        }
+        if (fs.existsSync("graphs/"+batch._id.toString())) {
+            fs.rmSync("graphs/"+batch._id.toString(),{recursive : true})
+        }
         await authLog.deleteMany({batchId : batch._id.toString()})
         await Attendance.deleteMany({batchId : batch._id.toString()})
         await batch.deleteOne()
@@ -446,7 +458,7 @@ batchRoute.post("/delete", async (req,resp)=>{
     }
 })
 
-batchRoute.get("/details",async (req,resp)=>{
+batchRoute.post("/details",async (req,resp)=>{
     try {
         const data = await parseToken(req,resp) 
         const user = await User.findById(data.id)
@@ -470,8 +482,8 @@ batchRoute.get("/details",async (req,resp)=>{
             const co_owner_user = await User.findById(co_owner)
             co_owners.push(co_owner_user.username.toString())
         }
-        const owner_name = await User.findById(batch.owner).username
-        return resp.json({batchname : batch.name,batchcode : batch.short_id,members : members,co_owners : co_owners,owner : owner_name})
+        const owner = await User.findById(batch.owner)
+        return resp.json({batchname : batch.name,batchcode : batch.short_id,members : members,co_owners : co_owners,owner : owner.username})
     }
     catch(err) {
         return resp.status(400).json({error : err.toString()})

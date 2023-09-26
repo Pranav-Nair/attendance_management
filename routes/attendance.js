@@ -4,6 +4,7 @@ const Batch = require("../models/batchmodel")
 const {User,authLog} = require("../models/usermodel")
 const Attendance = require("../models/attendancemodel")
 const fs = require("fs")
+const {resolve} = require("path")
 
 const attendanceRoute = express.Router()
 
@@ -459,8 +460,8 @@ attendanceRoute.post("/logs",async (req,resp)=>{
             return resp.status(404).json({error : "user not found"})
         }
 
-        if (!req.body.batchcode || !req.body.startdate || !req.body.username) {
-            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','startdate','enddate','username']})
+        if (!req.body.batchcode || !req.body.startdate) {
+            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','startdate','enddate']})
         } 
         if (!isvalidDate(req.body.startdate)) {
             return resp.status(400).json({error : "invalid date format",format : "YYYY-MM-DD"})
@@ -495,5 +496,319 @@ attendanceRoute.post("/logs",async (req,resp)=>{
         return resp.status(400).json({error : err.toString()})
     }
 })
+
+attendanceRoute.post("/graph/avg-v-user",async (req,resp)=>{
+    try {
+        const data = await parseToken(req,resp)
+        const user = await User.findById(data.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+
+        if (!req.body.batchcode || !req.body.startdate || !req.body.username) {
+            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','startdate','enddate','username']})
+        } 
+        if (!isvalidDate(req.body.startdate)) {
+            return resp.status(400).json({error : "invalid date format",format : "YYYY-MM-DD"})
+        }
+        const memberuser = await User.findOne({username : req.body.username})
+        if (!memberuser) {
+            return resp.status(404).json({error : "member not found"})
+        }
+        const batch = await Batch.findOne({short_id : req.body.batchcode})
+        if (!batch) {
+            return resp.status(404).json({error : "batch not found"})
+        }
+        if (batch.owner !== user._id.toString() && !batch.co_owners.includes(user._id.toString())) {
+            return resp.status(400).json({error : "PErmission denied",msg : "owners and co_owners can view attendance"})
+        }
+        let enddate =req.body.startdate
+        if (req.body.enddate) {
+            if (!isvalidDate(req.body.enddate)) {
+                return resp.status(400).json({error : "invalid date format",format : "YYYY-MM-DD"})
+            }
+            enddate = req.body.enddate
+        }
+        const todaystart = new Date(req.body.startdate).setHours(0,0,0,0)
+        const todayend = new Date(enddate).setHours(23,59,59,99)
+        let attendances = await Attendance.find({batchId : batch._id.toString() , createdAt : {$gte : todaystart,$lte : todayend},checkedIn : false})
+        let checkedOuts = []
+        let usercheckOuts = []
+        for (const attendance of attendances) {
+            let member = await User.findById(attendance.userId)
+            let clocked_hours = Math.abs(attendance.updatedAt - attendance.createdAt)/36e5
+            clocked_hours = parseFloat(clocked_hours.toFixed(2))
+            if (attendance.userId=memberuser._id.toString()) {
+                usercheckOuts.push({username : member.username,email : member.email,phone : member.phone,name : member.first_name +" "+member.middle_name + " "+member.last_name,checkedOut : !attendance.checkedIn,cheeckout_time : attendance.updatedAt,clocked_hours : clocked_hours})
+            } else {
+                checkedOuts.push({username : member.username,email : member.email,phone : member.phone,name : member.first_name +" "+member.middle_name + " "+member.last_name,checkedOut : !attendance.checkedIn,cheeckout_time : attendance.updatedAt,clocked_hours : clocked_hours})
+            }
+        }
+        let useravg = usercheckOuts.reduce((total,next)=>total + next.checkedOut,0) / usercheckOuts.length
+        let batchavg = checkedOuts.reduce((total,next)=>total + next.checkedOut,0) / checkedOuts.length
+        if (!batchavg || batchavg==0) {
+            batchavg=0.00001
+        }
+        const jsondata = JSON.stringify({useravg : useravg,batchavg : batchavg,batchId : batch._id.toString()})
+        const response = await fetch("http://localhost:5000/analytics/user-v-batch",{
+            method : "POST",
+            body : jsondata,
+            headers : {
+                'Content-Type': 'application/json'
+            }
+        })
+
+        const blob = await response.blob()
+        let arraybuffer = await blob.arrayBuffer()
+        const buffer = Buffer.from(arraybuffer)
+        if (!fs.existsSync("graphs/"+batch._id.toString())) {
+            fs.mkdirSync("graphs/"+batch._id.toString(),{recursive : true})
+        }
+        fs.writeFileSync("graphs/"+batch._id.toString()+"/user-v-batch.png",buffer)
+        const abs_path = resolve("graphs/"+batch._id.toString()+"/user-v-batch.png")
+        return resp.sendFile(abs_path)
+
+    }
+    catch(err) {
+        return resp.status(400).json({error : err.toString()})
+    }
+})
+
+attendanceRoute.post("/graph/checkin-v-checkout",async (req,resp)=>{
+    try {
+        const data = await parseToken(req,resp)
+        const user = await User.findById(data.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+
+        if (!req.body.batchcode || !req.body.startdate) {
+            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','startdate']})
+        } 
+        if (!isvalidDate(req.body.startdate)) {
+            return resp.status(400).json({error : "invalid date format",format : "YYYY-MM-DD"})
+        }
+        const batch = await Batch.findOne({short_id : req.body.batchcode})
+        if (!batch) {
+            return resp.status(404).json({error : "batch not found"})
+        }
+        if (batch.owner !== user._id.toString() && !batch.co_owners.includes(user._id.toString())) {
+            return resp.status(400).json({error : "PErmission denied",msg : "owners and co_owners can view attendance"})
+        }
+        let enddate =req.body.startdate
+        const todaystart = new Date(req.body.startdate).setHours(0,0,0,0)
+        const todayend = new Date(enddate).setHours(23,59,59,99)
+        let attendances = await Attendance.find({batchId : batch._id.toString() , createdAt : {$gte : todaystart,$lte : todayend}})
+        let checkedOuts = []
+        let checkIns = []
+        for (const attendance of attendances) {
+            let member = await User.findById(attendance.userId)
+            let clocked_hours = Math.abs(attendance.updatedAt - attendance.createdAt)/36e5
+            clocked_hours = parseFloat(clocked_hours.toFixed(2))
+            if (attendance.checkedIn) {
+                checkIns.push({username : member.username,email : member.email,phone : member.phone,name : member.first_name +" "+member.middle_name + " "+member.last_name,checkedOut : !attendance.checkedIn,cheeckout_time : attendance.updatedAt,clocked_hours : clocked_hours})
+            } else {
+                checkedOuts.push({username : member.username,email : member.email,phone : member.phone,name : member.first_name +" "+member.middle_name + " "+member.last_name,checkedOut : !attendance.checkedIn,cheeckout_time : attendance.updatedAt,clocked_hours : clocked_hours})
+            }
+        }
+        let checkinCount = checkIns.length
+        let checkoutCount = checkedOuts.length
+        let memberCount = batch.members.length
+        const jsondata = JSON.stringify({checkIns : checkinCount,checkOuts : checkoutCount,total : memberCount,batchId : batch._id.toString()})
+        console.log(jsondata)
+        const response = await fetch("http://localhost:5000/analytics/checkin-v-checkout",{
+            method : "POST",
+            body : jsondata,
+            headers : {
+                'Content-Type': 'application/json'
+            }
+        })
+
+        const blob = await response.blob()
+        let arraybuffer = await blob.arrayBuffer()
+        const buffer = Buffer.from(arraybuffer)
+        if (!fs.existsSync("graphs/"+batch._id.toString())) {
+            fs.mkdirSync("graphs/"+batch._id.toString(),{recursive : true})
+        }
+        fs.writeFileSync("graphs/"+batch._id.toString()+"/checkin-v-checkout.png",buffer)
+        const abs_path = resolve("graphs/"+batch._id.toString()+"/checkin-v-checkout.png")
+        return resp.sendFile(abs_path)
+
+    }
+    catch(err) {
+        return resp.status(400).json({error : err.toString()})
+    }
+})
+
+attendanceRoute.post("/graphs/avgtime-btw-dates", async (req,resp)=>{
+    try {
+        const data = await parseToken(req,resp)
+        const user = await User.findById(data.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+
+        if (!req.body.batchcode || !req.body.startdate || !req.body.enddate) {
+            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','startdate','enddate']})
+        } 
+        if (!isvalidDate(req.body.startdate)) {
+            return resp.status(400).json({error : "invalid date format",format : "YYYY-MM-DD"})
+        }
+        const batch = await Batch.findOne({short_id : req.body.batchcode})
+        if (!batch) {
+            return resp.status(404).json({error : "batch not found"})
+        }
+        if (batch.owner !== user._id.toString() && !batch.co_owners.includes(user._id.toString())) {
+            return resp.status(400).json({error : "PErmission denied",msg : "owners and co_owners can view attendance"})
+        }
+        let enddate =req.body.startdate
+        const todaystart = new Date(req.body.startdate).setHours(0,0,0,0)
+        const todayend = new Date(enddate).setHours(23,59,59,99)
+        let attendances = await Attendance.aggregate([
+            {
+              $match: {
+                batchId: batch._id.toString()
+              }
+            },
+            {
+              $project: {
+                createdAt : 1,
+                day: { $dayOfYear: "$createdAt" },
+                timeDifference: {
+                  $divide: [
+                    { $subtract: ["$updatedAt", "$createdAt"] },
+                    3600000
+                  ]
+                }
+              }
+            },
+            {
+              $group: {
+                _id: {
+                    day: { $dayOfYear: "$createdAt" },
+                    year: { $year: "$createdAt" }, // Extract the year from createdAt
+                  },
+                avgTimeDifference: { $avg: "$timeDifference" }
+              }
+            },
+            {
+              $sort: { _id: 1 }
+            }
+          ])
+        
+        let dates = []
+        let avg_time = []
+        attendances = attendances.map((attendance) => {
+        const year = attendance._id.year;
+        const dayOfYear = attendance._id.day;
+        const date = new Date(year, 0); // Create a new date with the extracted year
+        date.setDate(dayOfYear); // Set the day of the year
+            return {
+                date,
+                avgTimeDifference: attendance.avgTimeDifference,
+            };
+        });
+        for (const attendance of attendances) {
+            dates.push(attendance.date)
+            avg_time.push(attendance.avgTimeDifference)
+        }
+        const jsondata = JSON.stringify({dates : dates,avg_times : avg_time,batchId : batch._id.toString()})
+        const response = await fetch("http://localhost:5000/analytics/avgtime-btw-dates",{
+            method : "POST",
+            body : jsondata,
+            headers : {
+                'Content-Type': 'application/json'
+            }
+        })
+
+        const blob = await response.blob()
+        let arraybuffer = await blob.arrayBuffer()
+        const buffer = Buffer.from(arraybuffer)
+        if (!fs.existsSync("graphs/"+batch._id.toString())) {
+            fs.mkdirSync("graphs/"+batch._id.toString(),{recursive : true})
+        }
+        fs.writeFileSync("graphs/"+batch._id.toString()+"/avgtime-btw-dates.png",buffer)
+        const abs_path = resolve("graphs/"+batch._id.toString()+"/avgtime-btw-dates.png")
+        return resp.sendFile(abs_path)
+
+    }
+    catch(err) {
+        return resp.status(400).json({error : err.toString()})
+    }
+})
+
+attendanceRoute.post("/graphs/location-v-checkouts", async (req,resp)=>{
+    try {
+        const data = await parseToken(req,resp)
+        const user = await User.findById(data.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+
+        if (!req.body.batchcode) {
+            return resp.status(400).json({error : "missing fields",required_fields : ['batchcode']})
+        } 
+        if (!isvalidDate(req.body.startdate)) {
+            return resp.status(400).json({error : "invalid date format",format : "YYYY-MM-DD"})
+        }
+        const batch = await Batch.findOne({short_id : req.body.batchcode})
+        if (!batch) {
+            return resp.status(404).json({error : "batch not found"})
+        }
+        if (batch.owner !== user._id.toString() && !batch.co_owners.includes(user._id.toString())) {
+            return resp.status(400).json({error : "PErmission denied",msg : "owners and co_owners can view attendance"})
+        }
+        let attendances = await Attendance.aggregate([
+            {
+                $match: {
+                    checkedIn: false,
+                    batchId : batch._id.toString()
+                }
+            },
+            {
+                $group: {
+                    _id: '$location',
+                    checkedIn: { $sum: 1 }
+                }
+            },
+            {
+                $project: {
+                    location: '$_id',
+                    checkedIn: 1,
+                    _id: 0
+                }
+            }
+        ]);
+        let locations = []
+        let count = []
+        for (const attendance of attendances) {
+            locations.push(attendance.location)
+            count.push(attendance.checkedIn)
+        }
+        const jsondata = JSON.stringify({locations : locations,count : count,batchId : batch._id.toString()})
+        const response = await fetch("http://localhost:5000/analytics/location-v-checkout",{
+            method : "POST",
+            body : jsondata,
+            headers : {
+                'Content-Type': 'application/json'
+            }
+        })
+
+        const blob = await response.blob()
+        let arraybuffer = await blob.arrayBuffer()
+        const buffer = Buffer.from(arraybuffer)
+        if (!fs.existsSync("graphs/"+batch._id.toString())) {
+            fs.mkdirSync("graphs/"+batch._id.toString(),{recursive : true})
+        }
+        fs.writeFileSync("graphs/"+batch._id.toString()+"/locations-checkout.png",buffer)
+        const abs_path = resolve("graphs/"+batch._id.toString()+"/locations-checkout.png")
+        return resp.sendFile(abs_path)
+
+    }
+    catch(err) {
+        return resp.status(400).json({error : err.toString()})
+    }
+})
+
 
 module.exports = attendanceRoute
