@@ -14,8 +14,13 @@ userRoute.post("/register",async (req,resp)=>{
     try {
         if (! req.body.username || !req.body.password || !req.body.first_name || !req.body.last_name) {
             return resp.status(400).json({error : "missing fields", required_fields : [
-                'first_name',"last_name","middle_name (opt)","email (opt)",'username',"password","phone (opt)"
+                'first_name',"last_name","middle_name (opt)","email (opt)",'username',"password","phone (opt)","country_code (opt)"
             ]})
+        }
+        if (req.body.phone) {
+            if (!req.body.country_code) {
+                return resp.status(400).json({error : "phone number must be included with country_code"})
+            }
         }
         if (req.body._id) {
             return resp.status(400).json({error : "cannot insert _id"})
@@ -43,6 +48,7 @@ userRoute.post("/register",async (req,resp)=>{
         if (existUser) {
             return resp.status(400).json({error : "email already taken"})
         }
+        const existphone = await User.findOne({phone : req.body.phone,country_code : req.body.country_code})
         const hashedval = await bcrypt.hash(req.body.password,10)
         req.body.password = hashedval
         const newuser = new User(req.body)
@@ -73,7 +79,7 @@ userRoute.post("/login",async (req,resp)=>{
                 deviceId : req.body.deviceId,
                 requestType : "logIn"
             })
-            auth.save()
+            await auth.save()
         }
         const validpassword = await bcrypt.compare(req.body.password,user.password)
         if (!validpassword) {
@@ -112,7 +118,7 @@ userRoute.post("/edit",async (req,resp)=>{
                 "middle_name (opt)","phone (opt)" ,"username (opt)"
             ]})
         }
-        if (req.body.email) {
+        if (req.body.email && req.body.email!==-1) {
             if (!validator.validate(req.body.email)) {
                 return resp.status(400).json({error : "email not valid"})
             }
@@ -147,6 +153,28 @@ userRoute.post("/edit",async (req,resp)=>{
         const user = await User.findById(tokenData.id)
         if (!user) {
             return resp.status(404).json({error : "user not found"})
+        }
+        if (req.body.phone===-1) {
+            let unset = {phone : user.phone,country_code : user.country_code}
+            await user.updateOne({$unset : unset})
+            delete req.body.phone
+            delete req.body.country_code
+        }
+        if (req.body.phone) {
+            let cc = user.country_code
+            if (req.body.country_code) {
+                cc = req.body.country_code
+            }
+            if (!cc) {
+                return resp.status(400).json({error : "phone number must be accompanied by country code"})
+            }
+            if (await User.findOne({phone : req.body.phone,country_code :cc })) {
+                return resp.status(400).json({error : "phone number and country code combination in use"})
+            }
+        }
+        if (req.body.email===-1) {
+            delete req.body.email
+            await user.updateOne({$unset : {email : user.email}})
         }
         await user.updateOne({$set : req.body})
         return resp.status(200).json({msg : "user modified"})
@@ -242,7 +270,7 @@ userRoute.get("/info/:username",async(req,resp)=>{
         }
         return resp.status(200).json({first_name : user.first_name
         ,middle_name : user.middle_name,last_name : user.last_name,email : user.email,
-        phone : user.phone})
+        phone : user.phone,username : user.username})
     }
     catch(err) {
         return resp.status(400).json({error : err.toString()})
