@@ -32,6 +32,9 @@ userRoute.post("/register",async (req,resp)=>{
                 'can contain numbers . and _'
             ]})
         }
+        if (await User.findOne({username : req.body.username})) {
+            return resp.status(400).json({error : "username already taken"})
+        }
         if(req.body.email) {
             if (!validator.validate(req.body.email)) {
                 return resp.status(400).json({error : "email not valid"})
@@ -44,11 +47,18 @@ userRoute.post("/register",async (req,resp)=>{
                 'contain Uppercase Lowercase letters , numbers , sspecial charecters'
             ]})
         }
-        const existUser = await User.findOne({email : req.body.email})
-        if (existUser) {
-            return resp.status(400).json({error : "email already taken"})
+        if (req.body.email) {
+            const existUser = await User.findOne({email : req.body.email})
+            if (existUser) {
+                return resp.status(400).json({error : "email already taken"})
+            }
         }
-        const existphone = await User.findOne({phone : req.body.phone,country_code : req.body.country_code})
+        if (req.body.phone) {
+            const existphone = await User.findOne({phone : req.body.phone,country_code : req.body.country_code})
+            if (existphone) {
+                return resp.status(400).json({error : "phone number already taken"})
+            }
+        }
         const hashedval = await bcrypt.hash(req.body.password,10)
         req.body.password = hashedval
         const newuser = new User(req.body)
