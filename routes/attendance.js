@@ -110,7 +110,7 @@ attendanceRoute.post("/upload",async (req,resp)=>{
         return resp.status(status).json(resp_json)
     }
     catch(err) {
-        return resp.json({error : err.toString()})
+        return resp.status(400).json({error : err.toString()})
     }
 })
 
@@ -142,7 +142,7 @@ attendanceRoute.post("/compare",async(req,resp)=>{
         return resp.status(stat).json(resp_json)
     }
     catch(err) {
-        return resp.status(stat).json({error : err.toString()})
+        return resp.status(400).json({error : err.toString()})
     }
 })
 
@@ -184,7 +184,7 @@ attendanceRoute.post("/delete",async (req,resp)=>{
         return resp.status(status).json(resp_json)
     }
     catch(err) {
-        return resp.json({error : err.toString()})
+        return resp.status(400).json({error : err.toString()})
     }
 })
 
