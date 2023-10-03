@@ -12,10 +12,13 @@ const userRoute = express.Router()
 
 userRoute.post("/register",async (req,resp)=>{
     try {
-        if (! req.body.username || !req.body.password || !req.body.first_name || !req.body.last_name) {
+        if (!req.body.username || !req.body.password || !req.body.first_name || !req.body.last_name) {
             return resp.status(400).json({error : "missing fields", required_fields : [
                 'first_name',"last_name","middle_name (opt)","email (opt)",'username',"password","phone (opt)","country_code (opt)"
             ]})
+        }
+        if (!req.body.first_name.trim() || !req.body.last_name.trim()) {
+            return resp.status(400).json({error : "empty fields",msg : ["first_name","last_name"]})
         }
         if (req.body.phone) {
             if (!req.body.country_code) {
@@ -121,12 +124,19 @@ userRoute.post("/edit",async (req,resp)=>{
         if (!tokenData) {
             return resp.status(400).json({error : "token data maybe corrupted"})
         }
-        if (!req.body || !req.body.email && !req.body.password && !req.body.first_name && !req.body.last_name
-            && !req.body.middle_name && !req.body.phone && !req.body.username) {
+        if (!req.body || !req.body.email && !req.body.password && !req.body.first_name && !req.body.last_name && 
+            !req.body.middle_name && !req.body.phone && !req.body.username) {
             return resp.status(400).json({error : "missing fields",required_fields : [
                 "email (opt)","password (opt)","first_name (opt)","last_name (opt)",
                 "middle_name (opt)","phone (opt)" ,"username (opt)"
             ]})
+        }
+        if ((req.body.middle_name && req.body.middle_name!==-1 &&!req.body.middle_name.trim()) || (req.body.first_name && !req.body.first_name.trim()) ||
+        (req.body.last_name && !req.body.last_name.trim())) {
+            return resp.status(400).json({error : "empty fileds"})
+        }
+        if (req.body._id) {
+            return resp.status(400).json({error : "cannot edit _id"})
         }
         if (req.body.email && req.body.email!==-1) {
             if (!validator.validate(req.body.email)) {
@@ -186,11 +196,15 @@ userRoute.post("/edit",async (req,resp)=>{
             delete req.body.email
             await user.updateOne({$unset : {email : user.email}})
         }
+        if (req.body.middle_name===-1) {
+            delete req.body.middle_name
+            await user.updateOne({$unset:{middle_name : user.middle_name}})
+        }
         await user.updateOne({$set : req.body})
         return resp.status(200).json({msg : "user modified"})
     }
     catch(err) {
-        return resp.json({error : err.toString()})
+        return resp.status(400).json({error : err.toString()})
     }
 })
 
@@ -236,9 +250,13 @@ userRoute.delete("/delete",async (req,resp)=>{
         }
         const response = await fetch("http://localhost:5000/ml/delete",{
             method : 'POST',
+            headers : {
+                "Content-Type":"application/json"
+            },
             body : JSON.stringify({id : user._id.toString()})
         })
         if (response.status==400) {
+            console.log(await response.json())
             return resp.status(400).json({error : "user deletion failed",msg : "failed to delete face"})
         }
         await Attendance.deleteMany({userId : user._id.toString()})
@@ -280,7 +298,38 @@ userRoute.get("/info/:username",async(req,resp)=>{
         }
         return resp.status(200).json({first_name : user.first_name
         ,middle_name : user.middle_name,last_name : user.last_name,email : user.email,
-        phone : user.phone,username : user.username})
+        country_code : user.country_code,phone : user.phone,username : user.username})
+    }
+    catch(err) {
+        return resp.status(400).json({error : err.toString()})
+    }
+    
+})
+
+userRoute.get("/info",async(req,resp)=>{
+    let token
+    try {
+        const authtoken = req.headers.authorization.split(" ")
+        if(authtoken.length==2) {
+            token = authtoken[1]
+        }else {
+            token = authtoken[0]
+        }
+        if (!token) {
+            return resp.status(400).json({error : "nrequires autherization"})
+        }
+        const payload = await V3.verify(token.toString(),process.env.signPublic)
+        const tokenData = await V3.decrypt(payload.tokendata,process.env.secretKey)
+        if (!tokenData) {
+            return resp.status(400).json({error : "token data maybe corrupted"})
+        }
+        const user = await User.findById(tokenData.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+        return resp.status(200).json({first_name : user.first_name
+        ,middle_name : user.middle_name,last_name : user.last_name,email : user.email,
+        country_code : user.country_code,phone : user.phone,username : user.username})
     }
     catch(err) {
         return resp.status(400).json({error : err.toString()})
