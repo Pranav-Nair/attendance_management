@@ -1,6 +1,8 @@
 const express = require("express")
 const mongoose = require("mongoose")
 const dotenv = require("dotenv")
+const https = require("https")
+const fs = require("fs")
 const fileupload = require("express-fileupload")
 const userRoute = require("./routes/user")
 const batchRoute = require("./routes/batch")
@@ -23,7 +25,7 @@ app.use("/api/user",userRoute)
 app.use("/api/batch",batchRoute)
 app.use("/api/attendance",attendanceRoute)
 
-fetch("http://localhost:5000/")
+fetch(process.env.pyfaceURi)
     .then((response)=>{
         console.log("[OK] face recognition system running")
     })
@@ -31,12 +33,7 @@ fetch("http://localhost:5000/")
         console.log("[ERROR] face recognitionsystem is down")
     })
 
-
-app.listen(3000,(err,_)=>{
-    if(err) {
-        console.log("[ERROR] ",err.toString())
-    }
-    else {
-        console.log("[OK] Server started")
-    }
-})
+    const https_server = https.createServer({key :fs.readFileSync("certs/key.pem",).toString(),cert : fs.readFileSync("certs/cert.pem").toString()},app)
+    https_server.listen(3000,()=>{
+        console.log("[OK] server is running")
+    })

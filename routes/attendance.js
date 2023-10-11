@@ -24,6 +24,10 @@ attendanceRoute.post("/checkin", async (req,resp)=>{
         }
         const todaystart = new Date().setHours(0,0,0,0)
         const todayend = new Date().setHours(23,59,59,999)
+        const checkins = await Attendance.find({userId : user._id.toString(),checkedIn : true})
+        if (checkins.length >= 1) {
+            return resp.status(400).json({error : "cannot checkin to multiple batches"})
+        }
         const lastAttended = await Attendance.findOne({userId : user._id.toString(),batchId : batch._id.toString()})
             .sort({createdAt : -1}).limit(1)
         if (lastAttended.checkedIn) {
@@ -67,6 +71,30 @@ attendanceRoute.post("/checkout", async (req,resp)=>{
         return resp.json(update)
     }
     catch(err){
+        return resp.status(400).json({error : err.toString()})
+    }
+})
+
+attendanceRoute.get("/state", async (req,resp)=>{
+    try {
+        const data = await parseToken(req,resp)
+        const user = await User.findById(data.id)
+        if (!user) {
+            return resp.status(404).json({error : "user not found"})
+        }
+        const attendance = await Attendance.findOne({userId : user._id.toString(),checkedIn : true}).sort({createdAt : -1}).limit(1)
+        const last_checkOut = await Attendance.findOne({userId : user._id.toString(),checkedIn : false}).sort({createdAt : -1}).limit(1)
+        if (!attendance) {
+            if (last_checkOut) {
+                const batch = await Batch.findById(attendance.batchId)
+                return resp.status(200).json({username : user.username,state : "checkedOut",batchcode : batch.short_id})
+            }
+            return resp.status(200).json({username : user.username,state : "checkedOut"})
+        }
+        const batch = await Batch.findById(attendance.batchId)
+        return resp.status(200).json({username : user.username,state : "checkedIn",batchcode : batch.short_id})
+    }
+    catch(err) {
         return resp.status(400).json({error : err.toString()})
     }
 })
