@@ -30,10 +30,10 @@ attendanceRoute.post("/checkin", async (req,resp)=>{
         }
         const lastAttended = await Attendance.findOne({userId : user._id.toString(),batchId : batch._id.toString()})
             .sort({createdAt : -1}).limit(1)
-        if (lastAttended.checkedIn) {
+        if (lastAttended && lastAttended.checkedIn) {
             return resp.status(400).json({error : "already checked in"})
         }
-        if(lastAttended.createdAt >= todaystart && lastAttended.createdAt <=todayend && lastAttended.checkedIn==false) {
+        if(lastAttended && lastAttended.createdAt >= todaystart && lastAttended.createdAt <=todayend && lastAttended.checkedIn==false) {
             return resp.status(400).json({error : "you are checked out for todat"})
         }
         const newattendance = await new Attendance({userId : user._id.toString(),batchId : batch._id.toString(),checkedIn : true
@@ -86,7 +86,7 @@ attendanceRoute.get("/state", async (req,resp)=>{
         const last_checkOut = await Attendance.findOne({userId : user._id.toString(),checkedIn : false}).sort({createdAt : -1}).limit(1)
         if (!attendance) {
             if (last_checkOut) {
-                const batch = await Batch.findById(attendance.batchId)
+                const batch = await Batch.findById(last_checkOut.batchId.toString())
                 return resp.status(200).json({username : user.username,state : "checkedOut",batchcode : batch.short_id})
             }
             return resp.status(200).json({username : user.username,state : "checkedOut"})
@@ -117,7 +117,7 @@ attendanceRoute.post("/upload",async (req,resp)=>{
         let blob = new Blob([image])
         form.append("id",user._id.toString())
         form.append("img",blob,req.files.img.name)
-        const response = await fetch("http://localhost:5000/ml/upload",{
+        const response = await fetch(process.env.pyfaceURi+"/ml/upload",{
             method : "POST",
             body : form
         })
@@ -160,7 +160,7 @@ attendanceRoute.post("/compare",async(req,resp)=>{
         let blob = new Blob([image])
         form.append("id",user._id.toString())
         form.append("img",blob,req.files.img.name)
-        const response = await fetch("http://localhost:5000/ml/compare",{
+        const response = await fetch(process.env.pyfaceURi+"/ml/compare",{
             method : "POST",
             body : form
         })
@@ -200,7 +200,7 @@ attendanceRoute.post("/delete",async (req,resp)=>{
             await auth.save()
 
         }
-        const response = await fetch("http://localhost:5000/ml/delete",{
+        const response = await fetch(process.env.pyfaceURi+"/ml/delete",{
             method : "POST",
             headers: {
                 'Content-Type': 'application/json'
@@ -578,7 +578,7 @@ attendanceRoute.post("/graph/avg-v-user",async (req,resp)=>{
             batchavg=0.00001
         }
         const jsondata = JSON.stringify({useravg : useravg,batchavg : batchavg,batchId : batch._id.toString()})
-        const response = await fetch("http://localhost:5000/analytics/user-v-batch",{
+        const response = await fetch(process.env.pyfaceURi+"/analytics/user-v-batch",{
             method : "POST",
             body : jsondata,
             headers : {
@@ -644,7 +644,7 @@ attendanceRoute.post("/graph/checkin-v-checkout",async (req,resp)=>{
         let memberCount = batch.members.length
         const jsondata = JSON.stringify({checkIns : checkinCount,checkOuts : checkoutCount,total : memberCount,batchId : batch._id.toString()})
         console.log(jsondata)
-        const response = await fetch("http://localhost:5000/analytics/checkin-v-checkout",{
+        const response = await fetch(process.env.pyfaceURi+"/analytics/checkin-v-checkout",{
             method : "POST",
             body : jsondata,
             headers : {
@@ -741,7 +741,7 @@ attendanceRoute.post("/graphs/avgtime-btw-dates", async (req,resp)=>{
             avg_time.push(attendance.avgTimeDifference)
         }
         const jsondata = JSON.stringify({dates : dates,avg_times : avg_time,batchId : batch._id.toString()})
-        const response = await fetch("http://localhost:5000/analytics/avgtime-btw-dates",{
+        const response = await fetch(process.env.pyfaceURi+"/analytics/avgtime-btw-dates",{
             method : "POST",
             body : jsondata,
             headers : {
@@ -814,7 +814,7 @@ attendanceRoute.post("/graphs/location-v-checkouts", async (req,resp)=>{
             count.push(attendance.checkedIn)
         }
         const jsondata = JSON.stringify({locations : locations,count : count,batchId : batch._id.toString()})
-        const response = await fetch("http://localhost:5000/analytics/location-v-checkout",{
+        const response = await fetch(process.env.pyfaceURi+"/analytics/location-v-checkout",{
             method : "POST",
             body : jsondata,
             headers : {

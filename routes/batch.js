@@ -15,7 +15,7 @@ batchRoute.post("/create",async (req,resp)=>{
         if (!user) {
             return resp.status(404).json({error : "user not found"})
         }
-        if (!req.body.batchname) {
+        if (!req.body.batchname || !req.body.batchname.trim()) {
             return resp.json({error : "missing fields",required_fields : ['batchname','co_owners [] (opt)','members [](opt)']})
         }
         if (await Batch.findOne({name : req.body.batchname,owner : user._id})) {
@@ -287,7 +287,7 @@ batchRoute.post("/edit",async (req,resp)=>{
         if (!user) {
             return resp.status(404).json({error : "user not found"})
         }
-        if(!req.body.batchcode || !req.body.batchname) {
+        if(!req.body.batchcode || !req.body.batchname || !req.body.batchname.trim() || !req.body.batchcode.trim()) {
             return resp.status(400).json({error : "missing fields",required_fields : ['batchcode','batchname']})
         }
         const batch = await Batch.findOne({short_id : req.body.batchcode})

@@ -248,7 +248,7 @@ userRoute.delete("/delete",async (req,resp)=>{
                 }
             }
         }
-        const response = await fetch("http://localhost:5000/ml/delete",{
+        const response = await fetch(process.env.pyfaceURi+"/ml/delete",{
             method : 'POST',
             headers : {
                 "Content-Type":"application/json"
