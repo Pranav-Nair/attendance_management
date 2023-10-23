@@ -317,14 +317,14 @@ batchRoute.post("/ping",async (req,resp)=>{
             return resp.status(400).json({error : "missing fields",required_fields : ['deviceId',
         'location']})
         }
-        const batches = await Batch.find({members : user._id})
+        const batches = await Batch.find({members : user._id.toString()})
         if (!batches) {
             return resp.status(404).json({error : "batches not found"})
         }
         for (const batch of batches) {
             const ping = await new authLog({
-                userId : user._id,
-                batchId : batch._id,
+                userId : user._id.toString(),
+                batchId : batch._id.toString(),
                 location : req.body.location,
                 deviceId : req.body.deviceId,
                 requestType : "Ping"
