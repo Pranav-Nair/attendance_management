@@ -34,6 +34,6 @@ fetch(process.env.pyfaceURi)
     })
 
     const https_server = https.createServer({key :fs.readFileSync("certs/key.pem",).toString(),cert : fs.readFileSync("certs/cert.pem").toString()},app)
-    https_server.listen(3000,()=>{
+    https_server.listen(3000,"0.0.0.0",()=>{
         console.log("[OK] server is running")
     })
