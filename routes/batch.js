@@ -136,12 +136,12 @@ batchRoute.put("/leave/:batchcode",async(req,resp)=>{
         }
         if (batch.co_owners.includes(user._id)) {
             batch.updateOne({$pull : {co_owners : user._id.toString()}})
-            return resp.status(400).json({batchcode : batch.short_id,batchname : batch.name
+            return resp.status(200).json({batchcode : batch.short_id,batchname : batch.name
             ,username : user.username,position : "co_owner",membership_status : "left"})
         }
         if (batch.members.includes(user._id)) {
             await batch.updateOne({$pull : {members : user._id.toString()}})
-            return resp.status(400).json({batchcode : batch.short_id,batchname : batch.name
+            return resp.status(200).json({batchcode : batch.short_id,batchname : batch.name
                 ,username : user.username,position : "member",membership_status : "left"})
         } 
         return resp.status(400).json({error : "you are not in batch"})
