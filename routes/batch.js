@@ -96,7 +96,7 @@ batchRoute.put("/join/:batchcode",async (req,resp)=>{
         if (!batch) {
             return resp.status(404).json({error : "batch not found"})
         }
-        if(batch.owner===user._id) {
+        if(batch.owner===user._id.toString()) {
             return resp.status(400).json({error : "already in batch"})
         }
         if (batch.co_owners.includes(user._id)) {
